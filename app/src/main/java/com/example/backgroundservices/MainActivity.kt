@@ -33,6 +33,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var statusTextView: TextView
     private lateinit var btnStart: Button
 
+    private lateinit var btnLatihan: Button
 
     companion object {
         const val ACTION_SERVICE_STOPPED_JUMP = "com.example.backgroundservices.ACTION_SERVICE_STOPPED_JUMP"
@@ -45,6 +46,7 @@ class MainActivity : AppCompatActivity() {
         setContentView(R.layout.activity_main)
         statusTextView = findViewById(R.id.statusTextView)
         btnStart = findViewById(R.id.btnStart)
+        btnLatihan = findViewById(R.id.btnLatihan)
         ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.main)) { v, insets ->
             val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
             v.setPadding(systemBars.left, systemBars.top, systemBars.right, systemBars.bottom)
@@ -52,6 +54,17 @@ class MainActivity : AppCompatActivity() {
         }
 
         btnStart.setOnClickListener {
+            if (hasAllPermissions()) {
+                startTrackerService()
+            } else {
+                ActivityCompat.requestPermissions(
+                    this,
+                    permissionsToRequest,
+                    REQUEST_CODE_PERMISSIONS
+                )
+            }
+        }
+        btnLatihan.setOnClickListener {
             if (hasAllPermissions()) {
                 startTrackerService()
             } else {
