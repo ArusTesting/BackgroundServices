@@ -32,8 +32,8 @@ class MainActivity : AppCompatActivity() {
     }
     private lateinit var statusTextView: TextView
     private lateinit var btnStart: Button
-
     private lateinit var btnLatihan: Button
+    private var requestedTrainingMode = false
 
     companion object {
         const val ACTION_SERVICE_STOPPED_JUMP = "com.example.backgroundservices.ACTION_SERVICE_STOPPED_JUMP"
@@ -54,6 +54,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         btnStart.setOnClickListener {
+            requestedTrainingMode = false
             if (hasAllPermissions()) {
                 startTrackerService()
             } else {
@@ -65,8 +66,9 @@ class MainActivity : AppCompatActivity() {
             }
         }
         btnLatihan.setOnClickListener {
+            requestedTrainingMode = true
             if (hasAllPermissions()) {
-                startTrackerService()
+                startTrackerService(true)
             } else {
                 ActivityCompat.requestPermissions(
                     this,
@@ -82,10 +84,16 @@ class MainActivity : AppCompatActivity() {
             ContextCompat.checkSelfPermission(this, it) == PackageManager.PERMISSION_GRANTED
         }
     }
-    private fun startTrackerService() {
-        val serviceIntent = Intent(this, TrackerService::class.java)
+    private fun startTrackerService(trainingMode: Boolean = false) {
+        val serviceIntent = Intent(this, TrackerService::class.java).apply {
+            putExtra(TrackerService.EXTRA_TRAINING_MODE, trainingMode)
+        }
         ContextCompat.startForegroundService(this, serviceIntent)
-        statusTextView.text = "Background service sedang berjalan..."
+        statusTextView.text = if (trainingMode) {
+            "Latihan sedang berjalan"
+        } else {
+            "Background service sedang berjalan"
+        }
     }
     @RequiresApi(Build.VERSION_CODES.O)
     override fun onRequestPermissionsResult(
@@ -103,7 +111,9 @@ class MainActivity : AppCompatActivity() {
                 }
             }
             if (allPermissionsGranted) {
-                val serviceIntent = Intent(this, TrackerService::class.java)
+                val serviceIntent = Intent(this, TrackerService::class.java).apply {
+                    putExtra(TrackerService.EXTRA_TRAINING_MODE, requestedTrainingMode)
+                }
                 startForegroundService(serviceIntent)
                 finish()
             } else {

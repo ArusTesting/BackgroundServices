@@ -18,6 +18,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import kotlin.math.abs
 import android.app.Notification
+import android.os.SystemClock
 
 class TrackerService : Service(), SensorEventListener {
     private lateinit var sensorManager: SensorManager
@@ -27,6 +28,15 @@ class TrackerService : Service(), SensorEventListener {
     private val NOTIFICATION_CHANNEL_ID_JUMP_DETECTED = "tracker_jump_detected"
     private val NOTIFICATION_ID_SERVICE_RUNNING = 1
     private val NOTIFICATION_ID_JUMP_DETECTED = 2
+
+    companion object {
+        const val EXTRA_TRAINING_MODE = "com.example.backgroundservices.EXTRA_TRAINING_MODE"
+    }
+
+    private var trainingMode = false
+    private var jumpCount = 0
+    private var jumpArmed = true
+    private var lastJumpTime = 0L
 
     @RequiresApi(Build.VERSION_CODES.O)
     private fun createNotificationChannels() {
@@ -71,6 +81,10 @@ class TrackerService : Service(), SensorEventListener {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         Log.d("TrackerService", "Service onStartCommand")
+        trainingMode = intent?.getBooleanExtra(EXTRA_TRAINING_MODE, false) ?: false
+        jumpCount = 0
+        jumpArmed = true
+        lastJumpTime = 0L
 
         startForeground(
             NOTIFICATION_ID_SERVICE_RUNNING,
@@ -78,7 +92,7 @@ class TrackerService : Service(), SensorEventListener {
         )
 
         startJumpDetection()
-        return START_STICKY
+        return if (trainingMode) START_NOT_STICKY else START_STICKY
     }
 
     private fun buildServiceRunningNotification(): Notification {
@@ -105,21 +119,45 @@ class TrackerService : Service(), SensorEventListener {
     override fun onAccuracyChanged(p0: Sensor?, p1: Int) {
     }
 
+
     override fun onSensorChanged(event: SensorEvent?) {
-        if (event?.sensor?.type == Sensor.TYPE_ACCELEROMETER) {
-            val y = event.values[1]
+        if (event?.sensor?.type != Sensor.TYPE_ACCELEROMETER) return
+
+        val y = event.values[1]
+        val acceleration = abs(y)
+
+        if (trainingMode) {
+            val jumpThreshold = 12.0
+            val resetThreshold = 10.0
+            val now = SystemClock.elapsedRealtime()
+
+            if (acceleration < resetThreshold) {
+                jumpArmed = true
+            }
+
+            if (jumpArmed && acceleration > jumpThreshold && now - lastJumpTime >= 500L) {
+                jumpCount++
+                jumpArmed = false
+                lastJumpTime = now
+                Log.d("TrackerService", "Latihan: Lompatan ke-$jumpCount, Y: $y")
+                if (jumpCount > 2) {
+                    Log.d("TrackerService", "Latihan selesai! Total lompatan: $jumpCount")
+                    sensorManager.unregisterListener(this)
+                    showJumpNotification()
+                    stopSelf()
+                }
+            }
+        } else {
             val jumpThreshold = 15.0
-
-            if (abs(y) > jumpThreshold) {
+            if (acceleration > jumpThreshold) {
                 Log.d("TrackerService", "LOMPATAN Terdeteksi! Y: $y")
-
                 sensorManager.unregisterListener(this)
-
                 showJumpNotification()
                 stopSelf()
             }
         }
     }
+
 
     private fun showJumpNotification() {
         val mainActivityIntent = Intent(this, MainActivity::class.java).apply {
