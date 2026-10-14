@@ -62,6 +62,7 @@ class MainActivity : AppCompatActivity() {
                 )
             }
         }
+        handleIntent(intent)
     }
     private fun hasAllPermissions(): Boolean {
         return permissionsToRequest.all {
