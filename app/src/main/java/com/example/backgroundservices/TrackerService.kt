@@ -37,6 +37,7 @@ class TrackerService : Service(), SensorEventListener {
     private var jumpCount = 0
     private var jumpArmed = true
     private var lastJumpTime = 0L
+    private var trainingSessionId = 0L
 
     @RequiresApi(Build.VERSION_CODES.O)
     private fun createNotificationChannels() {
@@ -85,6 +86,7 @@ class TrackerService : Service(), SensorEventListener {
         jumpCount = 0
         jumpArmed = true
         lastJumpTime = 0L
+        trainingSessionId = System.currentTimeMillis()
 
         startForeground(
             NOTIFICATION_ID_SERVICE_RUNNING,
@@ -143,7 +145,20 @@ class TrackerService : Service(), SensorEventListener {
                 if (jumpCount > 2) {
                     Log.d("TrackerService", "Latihan selesai! Total lompatan: $jumpCount")
                     sensorManager.unregisterListener(this)
-                    showJumpNotification()
+                    showJumpNotification(jumpCount, trainingSessionId)
+                    val resultIntent = Intent(this, MainActivity::class.java).apply {
+                        action = MainActivity.ACTION_SERVICE_STOPPED_JUMP
+                        putExtra(MainActivity.EXTRA_JUMP_COUNT, jumpCount)
+                        putExtra(MainActivity.EXTRA_TRAINING_SESSION, trainingSessionId)
+                        flags = Intent.FLAG_ACTIVITY_NEW_TASK or
+                                Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                                Intent.FLAG_ACTIVITY_SINGLE_TOP
+                    }
+                    try {
+                        startActivity(resultIntent)
+                    } catch (e: Exception) {
+                        Log.e("TrackerService", "Gagal membuka MainActivity", e)
+                    }
                     stopSelf()
                 }
             }
@@ -159,10 +174,12 @@ class TrackerService : Service(), SensorEventListener {
     }
 
 
-    private fun showJumpNotification() {
+    private fun showJumpNotification(count: Int = 0, sessionId: Long = 0L) {
         val mainActivityIntent = Intent(this, MainActivity::class.java).apply {
             action = MainActivity.ACTION_SERVICE_STOPPED_JUMP
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+            putExtra(MainActivity.EXTRA_JUMP_COUNT, count)
+            putExtra(MainActivity.EXTRA_TRAINING_SESSION, sessionId)
         }
 
         val pendingMainActivityIntent = PendingIntent.getActivity(

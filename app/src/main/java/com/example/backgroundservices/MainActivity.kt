@@ -14,6 +14,10 @@ import androidx.core.view.WindowInsetsCompat
 import android.content.pm.PackageManager
 import androidx.annotation.RequiresApi
 import androidx.core.content.ContextCompat
+import android.content.ContentValues
+import android.provider.CalendarContract
+import android.widget.Toast
+import java.util.TimeZone
 
 class MainActivity : AppCompatActivity() {
     private val permissionsToRequest = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -38,6 +42,9 @@ class MainActivity : AppCompatActivity() {
     companion object {
         const val ACTION_SERVICE_STOPPED_JUMP = "com.example.backgroundservices.ACTION_SERVICE_STOPPED_JUMP"
         const val REQUEST_CODE_PERMISSIONS = 101
+        const val EXTRA_JUMP_COUNT = "com.example.backgroundservices.EXTRA_JUMP_COUNT"
+        const val EXTRA_TRAINING_SESSION = "com.example.backgroundservices.EXTRA_TRAINING_SESSION"
+        const val REQUEST_CODE_CALENDAR = 102
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -121,9 +128,84 @@ class MainActivity : AppCompatActivity() {
             }
         }
     }
+
     private fun handleIntent(intent: Intent?) {
-        if (intent?.action == ACTION_SERVICE_STOPPED_JUMP) {
+        if (intent?.action != ACTION_SERVICE_STOPPED_JUMP) return
+        val count = intent.getIntExtra(EXTRA_JUMP_COUNT, 0)
+        val sessionId = intent.getLongExtra(EXTRA_TRAINING_SESSION, 0L)
+        if (count >= 3 && sessionId != 0L) {
+            statusTextView.text = "Latihan selesai! Jumlah lompatan: $count"
+            saveTrainingCalendarEvent(count, sessionId)
+        } else {
             statusTextView.text = "Background services sudah berhenti karena Anda melompat"
+        }
+    }
+    private fun hasCalendarPermissions(): Boolean {
+        return ContextCompat.checkSelfPermission(
+            this,
+            Manifest.permission.READ_CALENDAR
+        ) == PackageManager.PERMISSION_GRANTED &&
+                ContextCompat.checkSelfPermission(
+                    this,
+                    Manifest.permission.WRITE_CALENDAR
+                ) == PackageManager.PERMISSION_GRANTED
+    }
+
+    private fun saveTrainingCalendarEvent(count: Int, sessionId: Long) {
+        val preferences = getSharedPreferences("latihan_events", MODE_PRIVATE)
+        val eventKey = "saved_$sessionId"
+        if (preferences.getBoolean(eventKey, false)) return
+        if (!hasCalendarPermissions()) {
+            ActivityCompat.requestPermissions(
+                this,
+                arrayOf(
+                    Manifest.permission.READ_CALENDAR,
+                    Manifest.permission.WRITE_CALENDAR
+                ),
+                REQUEST_CODE_CALENDAR
+            )
+            return
+        }
+        try {
+            val calendarId = contentResolver.query(
+                CalendarContract.Calendars.CONTENT_URI,
+                arrayOf(CalendarContract.Calendars._ID),
+                "${CalendarContract.Calendars.CALENDAR_ACCESS_LEVEL} >= ? AND ${CalendarContract.Calendars.VISIBLE} = 1",
+                arrayOf(CalendarContract.Calendars.CAL_ACCESS_CONTRIBUTOR.toString()),
+                null
+            )?.use { cursor ->
+                if (cursor.moveToFirst()) cursor.getLong(0) else null
+            }
+
+            if (calendarId == null) {
+                Toast.makeText(this, "Tidak ada kalender yang dapat digunakan", Toast.LENGTH_LONG).show()
+                return
+            }
+
+            val startTime = System.currentTimeMillis()
+            val endTime = startTime + 30 * 60 * 1000L
+
+            val values = ContentValues().apply {
+                put(CalendarContract.Events.CALENDAR_ID, calendarId)
+                put(CalendarContract.Events.TITLE, "Latihan")
+                put(CalendarContract.Events.DESCRIPTION, "Jumlah lompatan: $count")
+                put(CalendarContract.Events.DTSTART, startTime)
+                put(CalendarContract.Events.DTEND, endTime)
+                put(CalendarContract.Events.EVENT_TIMEZONE, TimeZone.getDefault().id)
+            }
+
+            val eventUri = contentResolver.insert(
+                CalendarContract.Events.CONTENT_URI,
+                values
+            )
+            if (eventUri != null) {
+                preferences.edit().putBoolean(eventKey, true).apply()
+                Toast.makeText(this, "Event Latihan berhasil dibuat", Toast.LENGTH_LONG).show()
+            } else {
+                Toast.makeText(this, "Gagal membuat event", Toast.LENGTH_LONG).show()
+            }
+        } catch (e: Exception) {
+            Toast.makeText(this, "Gagal mengakses kalender: ${e.message}", Toast.LENGTH_LONG).show()
         }
     }
     override fun onNewIntent(intent: Intent) {
