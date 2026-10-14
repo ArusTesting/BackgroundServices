@@ -1,6 +1,7 @@
 package com.example.backgroundservices
 
 import android.Manifest
+import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import android.widget.Button
@@ -10,6 +11,9 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import android.content.pm.PackageManager
+import androidx.annotation.RequiresApi
+import androidx.core.content.ContextCompat
 
 class MainActivity : AppCompatActivity() {
     private val permissionsToRequest = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -58,5 +62,49 @@ class MainActivity : AppCompatActivity() {
                 )
             }
         }
+    }
+    private fun hasAllPermissions(): Boolean {
+        return permissionsToRequest.all {
+            ContextCompat.checkSelfPermission(this, it) == PackageManager.PERMISSION_GRANTED
+        }
+    }
+    private fun startTrackerService() {
+        val serviceIntent = Intent(this, TrackerService::class.java)
+        ContextCompat.startForegroundService(this, serviceIntent)
+        statusTextView.text = "Background service sedang berjalan..."
+    }
+    @RequiresApi(Build.VERSION_CODES.O)
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == REQUEST_CODE_PERMISSIONS) {
+            var allPermissionsGranted = true
+            for (result in grantResults) {
+                if (result != PackageManager.PERMISSION_GRANTED) {
+                    allPermissionsGranted = false
+                    break
+                }
+            }
+            if (allPermissionsGranted) {
+                val serviceIntent = Intent(this, TrackerService::class.java)
+                startForegroundService(serviceIntent)
+                finish()
+            } else {
+                statusTextView.text = "Izin ditolak, service tidak dapat dijalankan."
+            }
+        }
+    }
+    private fun handleIntent(intent: Intent?) {
+        if (intent?.action == ACTION_SERVICE_STOPPED_JUMP) {
+            statusTextView.text = "Background services sudah berhenti karena Anda melompat"
+        }
+    }
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleIntent(intent)
     }
 }
